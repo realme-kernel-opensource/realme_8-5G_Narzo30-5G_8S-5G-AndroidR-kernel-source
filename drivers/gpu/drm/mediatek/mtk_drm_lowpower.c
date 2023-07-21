@@ -429,7 +429,9 @@ int mtk_drm_idlemgr_init(struct drm_crtc *crtc, int index)
 		kzalloc(sizeof(struct mtk_drm_idlemgr_context), GFP_KERNEL);
 	const int len = 50;
 	char name[len];
-
+/*#ifdef OPLUS_BUG_SYABILITY*/
+	struct mtk_panel_params *panel_ext = mtk_drm_get_lcm_ext_params(crtc);
+/*#endif*/
 	if (!idlemgr) {
 		DDPPR_ERR("struct mtk_drm_idlemgr allocate fail\n");
 		return -ENOMEM;
@@ -450,7 +452,16 @@ int mtk_drm_idlemgr_init(struct drm_crtc *crtc, int index)
 	idlemgr_ctx->enterulps = 0;
 	idlemgr_ctx->idlemgr_last_kick_time = ~(0ULL);
 	idlemgr_ctx->cur_lp_cust_mode = 0;
-	idlemgr_ctx->idle_check_interval = 50;
+/*#ifdef OPLUS_BUG_SYABILITY*/
+	if (panel_ext
+		&& panel_ext->idle_check_time) {
+		idlemgr_ctx->idle_check_interval = panel_ext->idle_check_time;
+	} else {
+		idlemgr_ctx->idle_check_interval = 50;
+	}
+/*#else*/
+	/*idlemgr_ctx->idle_check_interval = 50;*/
+/*#endif*/
 	idlemgr_ctx->idle_vblank_check_internal = 0;
 
 	snprintf(name, len, "mtk_drm_disp_idlemgr-%d", index);

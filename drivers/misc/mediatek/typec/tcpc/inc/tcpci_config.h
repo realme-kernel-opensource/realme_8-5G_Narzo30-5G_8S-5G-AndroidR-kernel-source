@@ -392,7 +392,11 @@
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
 /* debug config */
+#ifdef VENDOR_EDIT
+#define CONFIG_USB_PD_DBG_ALERT_STATUS
+#else
 /* #define CONFIG_USB_PD_DBG_ALERT_STATUS */
+#endif
 /* #define CONFIG_USB_PD_DBG_SKIP_ALERT_HANDLER */
 #define CONFIG_USB_PD_DBG_DP_DFP_D_AUTO_UPDATE
 
@@ -414,7 +418,11 @@
 #define CONFIG_WD_SBU_PL_RETRY		2
 #define CONFIG_WD_SBU_PH_RETRY		2
 #define CONFIG_WD_SBU_PH_AUDDEV		200 /* mV */
-#define CONFIG_WD_SBU_PH_LBOUND		1180 /* mV */
+#ifndef VENDOR_EDIT
+#define CONFIG_WD_SBU_PH_LBOUND		1200 /* mV */
+#else
+#define CONFIG_WD_SBU_PH_LBOUND		982 /* mV */
+#endif
 #define CONFIG_WD_SBU_PH_LBOUND1_C2C	2850 /* mV */
 #define CONFIG_WD_SBU_PH_UBOUND1_C2C	3150 /* mV */
 #define CONFIG_WD_SBU_PH_UBOUND2_C2C	3800 /* mV */

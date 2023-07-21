@@ -45,6 +45,12 @@
 /* Delay present fence would cause config merge */
 #endif
 
+//#ifdef VENDOR_EDIT
+/*
+* add for fingerprint notify frigger
+*/
+#define MTK_ONSCREENFINGERPRINT_EVENT 20
+//#endif /*VENDOR_EDIT*/
 #if defined(CONFIG_MACH_MT6893)
 #define CONFIG_MTK_DYN_SWITCH_BY_CMD
 #endif

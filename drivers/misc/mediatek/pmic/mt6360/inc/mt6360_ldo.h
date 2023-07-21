@@ -45,6 +45,9 @@ struct mt6360_ldo_platform_data {
 	struct resource *irq_res;
 	int irq_res_cnt;
 	u32 sdcard_det_en;
+#ifdef OPLUS_FEATURE_SDCARD
+	u8 ldo5_ctrls[MT6360_LDO_CTRLS_NUM];
+#endif /* OPLUS_FEATURE_SDCARD */
 };
 
 struct mt6360_ldo_info {

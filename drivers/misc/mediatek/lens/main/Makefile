@@ -23,7 +23,10 @@ MTK_CUSTOM_PATH  := $(srctree)/drivers/misc/mediatek
 
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/inc
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/lc898122af
+subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/dw9718taf
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/dw9800waf
+subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/dw9800af
+subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/b0954p65af
 subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/lc898212xdaf/inc
 ifeq ($(CONFIG_MTK_LENS_BU63165AF_SUPPORT), y)
   subdir-ccflags-y += -I$(MTK_CUSTOM_PATH)/lens/main/common/bu63165af/inc
@@ -35,6 +38,8 @@ ifeq ($(CONFIG_MTK_LENS_USE_MODULE), y)
 
 MAIN_CFILES += main_lens.c
 
+MAIN_CFILES  += common/dw9800af/DW9800AF.c
+MAIN_CFILES  += common/b0954p65af/B0954P65AF.c
 MAIN_CFILES  += common/bu64253gwzaf/BU64253GWZAF.c
 MAIN_CFILES  += common/fp5510e2af/FP5510E2AF.c
 MAIN_CFILES  += common/bu6424af/BU6424AF.c
@@ -46,6 +51,7 @@ MAIN_CFILES += common/dw9800waf/DW9800WAF.c
 MAIN_CFILES  += common/dw9814af/DW9814AF.c
 MAIN_CFILES  += common/dw9718af/DW9718AF.c
 MAIN_CFILES  += common/dw9718saf/DW9718SAF.c
+MAIN_CFILES  += common/dw9718taf/DW9718TAF.c
 MAIN_CFILES  += common/dw9719taf/DW9719TAF.c
 MAIN_CFILES  += common/dw9763af/DW9763AF.c
 MAIN_CFILES  += common/dw9839af/DW9839AF.c
@@ -89,9 +95,10 @@ obj-y  += common/bu6429af/
 obj-y  += common/bu64748af/
 obj-y  += common/dw9714af/
 obj-y  += common/dw9800waf/
+obj-y  += common/b0954p65af/
 obj-y  += common/dw9814af/
 obj-y  += common/dw9718af/
-obj-y += common/dw9718taf/
+obj-y  += common/dw9718taf/
 obj-y  += common/dw9718saf/
 obj-y  += common/dw9719taf/
 obj-y  += common/dw9763af/
@@ -114,5 +121,6 @@ else
   obj-y  += common/bu63169af/
 endif
 obj-y  += common/bu64253gwzaf/
+obj-y  += common/dw9800af/
 
 endif

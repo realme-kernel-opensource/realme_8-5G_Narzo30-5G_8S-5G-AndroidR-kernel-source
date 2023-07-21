@@ -242,6 +242,11 @@ enum mtk_ddp_io_cmd {
 	DSI_LFR_SET,
 	DSI_LFR_UPDATE,
 	DSI_LFR_STATUS_CHECK,
+	//#ifdef VENDOR_EDIT
+	DSI_READ,
+	LCM_HBM,
+	LCM_CABC,
+	//#endif
 };
 
 struct golden_setting_context {

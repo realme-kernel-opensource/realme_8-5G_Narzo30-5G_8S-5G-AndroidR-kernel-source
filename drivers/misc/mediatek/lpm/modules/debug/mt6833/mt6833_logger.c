@@ -37,6 +37,10 @@
 #define PCM_32K_TICKS_PER_SEC		(32768)
 #define PCM_TICK_TO_SEC(TICK)	(TICK / PCM_32K_TICKS_PER_SEC)
 
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+#include "../../../../../../soc/oppo/oppo_wakelock_profiler/oplus_wakelock_profiler_mtk.h"
+static int wakeup_state;
+#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
 #ifdef CONFIG_MTK_LPM_GS_DUMP_SUPPORT
 struct MT6886_LOGGER_NODE mt6833_log_gs_idle;
 struct MTK_LPM_GS_IDLE_INFO {
@@ -390,10 +394,17 @@ static u32 is_blocked_cnt;
 	is_no_blocked = wakesta->debug_flag & 0x2;
 
 	/* Check if System LPM ever is blocked over 10 times */
-	if (!is_no_blocked)
+	if (!is_no_blocked){
+		#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+		clk_state_statics(wakesta->r13,wakesta->timer_out,plat_mmio_read(SPM_BK_VTCXO_DUR),"static_clk_no_sleep");
+		#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
 		is_blocked_cnt++;
-	else
+	}else{
+		#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+		clk_state_statics(wakesta->debug_flag,wakesta->timer_out,plat_mmio_read(SPM_BK_VTCXO_DUR),"static_clk_sleep_count");
+		#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
 		is_blocked_cnt = 0;
+	}	
 
 	if (is_blocked_cnt < IS_BLOCKED_OVER_TIMES)
 		return;
@@ -669,7 +680,19 @@ static int mt6833_show_message(struct mt6833_spm_wake_status *wakesrc, int type,
 		rcu_irq_exit_irqson();
 	} else
 		pr_info("[name:spm&][SPM] %s", log_buf);
-
+	
+	#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+	//R12_EINT_EVENT_B wakeup statistics in other place
+	if((type == MT_LPM_ISSUER_SUSPEND) && (!(wakesrc->r12 & R12_EINT_EVENT_B))){
+		pr_info("%s:wakeup_reson=%d scenario=%s wakeupby(buf)=%s",__func__,wr,scenario,buf);
+		wakeup_state=false;
+		wakeup_state=wakeup_reasons_statics(buf, WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_SENSOR|WS_CNT_MODEM);
+		if((wakeup_state==false)&&(strlen(buf)!=0)){
+			wakeup_reasons_statics("other",WS_CNT_OTHER);	
+		}
+	}
+	#endif /* OPLUS_FEATURE_POWERINFO_STANDBY */
+	
 	return wr;
 }
 

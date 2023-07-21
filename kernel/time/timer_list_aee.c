@@ -134,7 +134,7 @@ print_base(struct seq_file *m, struct hrtimer_clock_base *base, u64 now)
 		   (unsigned long long) ktime_to_ns(base->offset));
 #endif
 	SEQ_printf_at_AEE(m,   "active timers:\n");
-	print_active_timers(m, base, now + ktime_to_ns(base->offset));
+	//print_active_timers(m, base, now + ktime_to_ns(base->offset));
 }
 
 static void print_cpu(struct seq_file *m, int cpu, u64 now)

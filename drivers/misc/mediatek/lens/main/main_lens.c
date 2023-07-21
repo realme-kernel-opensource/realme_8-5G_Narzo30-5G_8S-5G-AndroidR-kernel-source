@@ -42,6 +42,7 @@
 
 #include "lens_info.h"
 #include "lens_list.h"
+#include <soc/oplus/system/oppo_project.h>
 
 #define AF_DRVNAME "MAINAF"
 
@@ -88,6 +89,16 @@ static struct stAF_OisPosInfo OisPosInfo;
 /* ------------------------- */
 
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
+#ifdef VENDOR_EDIT
+	{1, AFDRV_LC898229AF, LC898229AF_SetI2Cclient, LC898229AF_Ioctl,
+	 LC898229AF_Release, LC898229AF_GetFileName, NULL},
+	{1, AFDRV_DW9800AF, DW9800AF_SetI2Cclient, DW9800AF_Ioctl,
+	 DW9800AF_Release, DW9800AF_GetFileName, NULL},
+	 {1, AFDRV_B0954P65AF, B0954P65AF_SetI2Cclient, B0954P65AF_Ioctl,
+	 B0954P65AF_Release, B0954P65AF_GetFileName, NULL},
+	{1, AFDRV_DW9718TAF, DW9718TAF_SetI2Cclient, DW9718TAF_Ioctl,
+	 DW9718TAF_Release, DW9718TAF_GetFileName, NULL},
+#else
 	{1, AFDRV_DW9718TAF, DW9718TAF_SetI2Cclient, DW9718TAF_Ioctl,
 	 DW9718TAF_Release, DW9718TAF_GetFileName, NULL},
 	{1, AFDRV_AK7371AF, AK7371AF_SetI2Cclient, AK7371AF_Ioctl,
@@ -149,6 +160,7 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	 LC898122AF_Release, LC898122AF_GetFileName, NULL},
 	{1, AFDRV_WV511AAF, WV511AAF_SetI2Cclient, WV511AAF_Ioctl,
 	 WV511AAF_Release, WV511AAF_GetFileName, NULL},
+#endif
 };
 
 static struct stAF_DrvList *g_pstAF_CurDrv;
@@ -256,11 +268,67 @@ static int af_pinctrl_set(int pin, int state)
 }
 
 /* PMIC */
+#ifdef VENDOR_EDIT
+static int g_regVCAMAFEn;
+extern int fan53870_cam_ldo_set_voltage(int LDO_NUM, int set_mv);
+extern int fan53870_cam_ldo_disable(int LDO_NUM);
+void Other_AFRegulatorCtrl(int Stage);
+void AFRegulatorCtrl(int Stage)
+{
+	int Status = -1;
+
+	if ( is_project(20015) || is_project(20016)
+		|| is_project(20108) || is_project(20109)
+		|| is_project(20651) || is_project(20652)
+		|| is_project(20653) || is_project(20654) ) {
+		Other_AFRegulatorCtrl(Stage);
+		return;
+	}
+	if(is_project(20075) || is_project(20076)) {
+		Other_AFRegulatorCtrl(Stage);
+		return;
+	}
+	if( is_project(20609) || is_project(0x2060A)
+        || is_project(0x2060B) || is_project(20796)
+        || is_project(0x206F0) || is_project(0x206FF)
+        || is_project(0x2070C) || is_project(0x2070B)
+        || is_project(0x2070E) || is_project(20795)) {
+		//Other_AFRegulatorCtrl(Stage);
+		return;
+	}
+	LOG_INF("AFIOC_S_SETPOWERCTRL Stage %p\n", Stage);
+	if (Stage == 0) {
+		LOG_INF("AFRegulatorCtrl(%d) init\n", Stage);
+	} else if (Stage == 1) {
+		if (g_regVCAMAFEn == 0) {
+			Status = fan53870_cam_ldo_set_voltage(7, 2800);
+			if (Status < 0) {
+				LOG_INF("fan53870_camaf set 2800 fail\n");
+			} else {
+				LOG_INF("fan53870_camaf set %d\n", Status);
+				g_regVCAMAFEn = 1;
+				usleep_range(5000, 5500);
+			}
+		} else {
+			LOG_INF("fan53870_camaf already set!\n");
+		}
+	} else {
+		if (g_regVCAMAFEn == 1) {
+			Status = fan53870_cam_ldo_disable(7);
+			if (Status < 0) {
+				LOG_INF("Camera Power disable error\n");
+			} else {
+				g_regVCAMAFEn = 0;
+			}
+		} else {
+			LOG_INF("Camera Power already disable\n");
+		}
+	}
+}
 #if !defined(CONFIG_MTK_LEGACY)
 static struct regulator *regVCAMAF;
-static int g_regVCAMAFEn;
 
-static void AFRegulatorCtrl(int Stage)
+void Other_AFRegulatorCtrl(int Stage)
 {
 	LOG_INF("AFIOC_S_SETPOWERCTRL regulator_put %p\n", regVCAMAF);
 
@@ -297,8 +365,7 @@ static void AFRegulatorCtrl(int Stage)
 					LOG_INF("regulator_get(%s)\n", "mt6317-ldo3");
 					#else
 					regVCAMAF =
-					regulator_get(lens_device, "vcamio");
-					LOG_INF("regulator_get(%s)\n", "vcamio");
+					regulator_get(lens_device, "vtp");
 					#endif
 				}
 				#elif defined(CONFIG_MACH_MT6853)
@@ -387,6 +454,7 @@ static void AFRegulatorCtrl(int Stage)
 		}
 	}
 }
+#endif
 #endif
 
 #ifdef CONFIG_MACH_MT6765

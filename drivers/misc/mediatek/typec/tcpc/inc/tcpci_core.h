@@ -354,6 +354,9 @@ struct tcpc_device {
 	/* For TCPC TypeC */
 	uint8_t typec_state;
 	uint8_t typec_role;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	uint8_t typec_role_new;
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 	uint8_t typec_attach_old;
 	uint8_t typec_attach_new;
 	uint8_t typec_local_cc;
@@ -505,6 +508,9 @@ struct tcpc_device {
 
 	/* TypeC Shield Protection */
 #ifdef CONFIG_WATER_DETECTION
+#ifdef VENDOR_EDIT
+        bool wd_already;
+#endif
 	int usbid_calib;
 #endif /* CONFIG_WATER_DETECTION */
 #ifdef CONFIG_CABLE_TYPE_DETECTION

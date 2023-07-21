@@ -928,6 +928,14 @@ struct rq {
 	struct cpuidle_state *idle_state;
 	int idle_state_idx;
 #endif
+#ifdef OPLUS_FEATURE_UIFIRST
+	struct list_head ux_thread_list;
+	int active_ux_balance;
+	struct cpu_stop_work ux_balance_work;
+#endif /* OPLUS_FEATURE_UIFIRST */
+#ifdef OPLUS_FEATURE_UIFIRST
+	u64 ux_task_load;
+#endif /* OPLUS_FEATURE_UIFIRST */
 };
 
 static inline int cpu_of(struct rq *rq)

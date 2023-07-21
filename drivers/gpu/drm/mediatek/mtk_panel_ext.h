@@ -245,6 +245,11 @@ struct mtk_panel_params {
 	unsigned int lcm_index;
 	unsigned int wait_sof_before_dec_vfp;
 	unsigned int doze_delay;
+	unsigned int oplus_teot_ns_multiplier;
+	bool mipi_cphy;
+/*#ifdef OPLUS_BUG_SYABILITY*/
+	unsigned int idle_check_time;
+/*#endif*/
 };
 
 struct mtk_panel_ext {
@@ -275,6 +280,15 @@ struct mtk_panel_funcs {
 		unsigned int dst_mode, enum MTK_PANEL_MODE_SWITCH_STAGE stage);
 	int (*get_virtual_heigh)(void);
 	int (*get_virtual_width)(void);
+	int (*esd_backlight_recovery)(void *dsi_drv, dcs_write_gce cb,
+		void *handle);
+	//#ifdef VENDOR_EDIT
+	int (*panel_poweroff)(struct drm_panel *panel);
+	int (*panel_poweron)(struct drm_panel *panel);
+	void (*hbm_set_state)(struct drm_panel *panel, bool state);
+	int (*set_hbm)(void *dsi_drv, dcs_write_gce cb,
+		void *handle, unsigned int hbm_mode);
+	//#endif
 	/**
 	 * @doze_enable_start:
 	 *
@@ -333,6 +347,8 @@ struct mtk_panel_funcs {
 	void (*hbm_get_state)(struct drm_panel *panel, bool *state);
 	void (*hbm_get_wait_state)(struct drm_panel *panel, bool *wait);
 	bool (*hbm_set_wait_state)(struct drm_panel *panel, bool wait);
+	void (*cabc_switch)(void *dsi_drv, dcs_write_gce cb,
+		void *handle, unsigned int cabc_mode);
 };
 
 void mtk_panel_init(struct mtk_panel_ctx *ctx);

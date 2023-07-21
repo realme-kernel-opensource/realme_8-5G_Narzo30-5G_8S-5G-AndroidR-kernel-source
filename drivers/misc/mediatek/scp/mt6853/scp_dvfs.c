@@ -114,7 +114,11 @@ static struct pm_qos_request dvfsrc_scp_vcore_req;
 unsigned int slp_ipi_ackdata0;
 int slp_ipi_init_done;
 unsigned int sleep_block_cnt[NR_REASONS];
-
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+extern void oplus_rpmh_stats_statics(const char *rpm_name,u64 sleep_count,u64 sleep_time);
+unsigned int sensor_sleep_count_before;
+static unsigned int flag =0;
+#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
 #ifdef ULPOSC_CALI_BY_AP
 static void __iomem *ulposc_base;
 
@@ -1369,9 +1373,20 @@ static int mt_scp_dump_sleep_count(void)
 	if (ret != IPI_ACTION_DONE)
 		printk_deferred("[name:scp&][%s:%d] - scp ipi fail, ret = %d\\n",
 		__func__, __LINE__, ret);
-	else
+	else{
 		printk_deferred("[name:scp&][%s:%d] - scp_sleep_cnt_0 = %d\n",
 		__func__, __LINE__, slp_ipi_ackdata0);
+		#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+		if(flag==0){
+			sensor_sleep_count_before=slp_ipi_ackdata0;
+			flag+=1;
+		}
+		if(slp_ipi_ackdata0>sensor_sleep_count_before){
+			oplus_rpmh_stats_statics("Sensor",slp_ipi_ackdata0-sensor_sleep_count_before,0);
+			sensor_sleep_count_before=slp_ipi_ackdata0;
+		}
+		#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
+	}
 
 	return 0;
 }

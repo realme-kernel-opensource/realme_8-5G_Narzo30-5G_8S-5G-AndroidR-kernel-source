@@ -65,6 +65,10 @@
 #include <mt-plat/mtk_qos_prefetch_common.h>
 #endif /* CONFIG_MTK_QOS_FRAMEWORK */
 
+#ifdef OPLUS_FEATURE_UIFIRST
+#include <linux/uifirst/uifirst_sched_common.h>
+#endif /* OPLUS_FEATURE_UIFIRST */
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 DEFINE_MUTEX(sched_isolation_mutex);
@@ -874,14 +878,13 @@ void init_opp_capacity_tbl(void)
 	struct sched_group *sg;
 	const struct sched_group_energy *sge;
 	struct cpufreq_policy *policy;
-	unsigned int *tbl;
+        unsigned int *tbl;
 
 	count = system_opp_count();
 	if (count < 0)
 		return;
-
-	tbl = kmalloc_array(count, sizeof(unsigned int), GFP_KERNEL);
-	if (!tbl)
+        tbl = kmalloc_array(count, sizeof(unsigned int), GFP_KERNEL);
+        if (!tbl)
 		return;
 
 	rcu_read_lock();
@@ -907,25 +910,25 @@ void init_opp_capacity_tbl(void)
 
 		for (i = 0; i < sge->nr_cap_states; i++) {
 			cap = get_opp_capacity(policy, i);
-			tbl[idx] = cap;
+                        tbl[idx] = cap;
 			idx++;
 		}
 		cpufreq_cpu_put(policy);
 		prev_cid = cid;
 	}
 	rcu_read_unlock();
-
-	sort(tbl, count, sizeof(unsigned int),
+        sort(tbl, count, sizeof(unsigned int),
 			&cap_compare, NULL);
 	tbl[count - 1] = SCHED_CAPACITY_SCALE;
 	total_opp_count = count;
-	opp_capacity_tbl = tbl;
+        opp_capacity_tbl = tbl;
+
 	opp_capacity_tbl_ready = 1;
 
 	return;
 free_unlock:
 	rcu_read_unlock();
-	kfree(tbl);
+         kfree(tbl);
 }
 
 unsigned int find_fit_capacity(unsigned int cap)
@@ -3215,6 +3218,9 @@ static inline void walt_try_to_wake_up(struct task_struct *p)
 	wallclock = walt_ktime_clock();
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 	walt_update_task_ravg(p, rq, TASK_WAKE, wallclock, 0);
+#ifdef OPLUS_FEATURE_UIFIRST
+	p->last_wake_ts = wallclock;
+#endif
 	rq_unlock_irqrestore(rq, &rf);
 }
 #else
@@ -3403,6 +3409,9 @@ static void try_to_wake_up_local(struct task_struct *p, struct rq_flags *rf)
 			atomic_dec(&rq->nr_iowait);
 		}
 		ttwu_activate(rq, p, ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK);
+#ifdef OPLUS_FEATURE_UIFIRST
+	p->last_wake_ts = wallclock;
+#endif
 	}
 
 	ttwu_do_wakeup(rq, p, 0, rf);
@@ -4316,7 +4325,43 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 
 	return ns;
 }
+#ifdef OPLUS_FEATURE_UIFIRST
+extern int sysctl_frame_rate;
+extern unsigned int walt_ravg_window;
+extern bool ux_task_misfit(struct task_struct *p, int cpu);
+u64 ux_task_load[NR_CPUS] = {0};
+u64 ux_load_ts[NR_CPUS] = {0};
+static u64 calc_freq_ux_load(struct task_struct *p, u64 wallclock)
+{
+	unsigned int maxtime = 0, factor = 0;
+	unsigned int window_size = walt_ravg_window / NSEC_PER_MSEC;
+	u64 timeline = 0, freq_exec_load = 0, freq_ravg_load = 0;
+	u64 wakeclock = p->last_wake_ts;
 
+	if (wallclock < wakeclock)
+		return 0;
+
+	if (sysctl_frame_rate <= 90)
+		maxtime = 5;
+	else if (sysctl_frame_rate <= 120)
+		maxtime = 4;
+	else
+		maxtime = 3;
+
+	timeline = wallclock - wakeclock;
+	factor = window_size / maxtime;
+	freq_exec_load = timeline * factor;
+
+	if (freq_exec_load > walt_ravg_window)
+		freq_exec_load = walt_ravg_window;
+
+	freq_ravg_load = (p->ravg.prev_window + p->ravg.curr_window) << 1;
+	if (freq_ravg_load > walt_ravg_window)
+		freq_ravg_load = walt_ravg_window;
+
+	return max(freq_exec_load, freq_ravg_load);
+}
+#endif
 /*
  * This function gets called by the timer code, with HZ frequency.
  * We call it with interrupts disabled.
@@ -4336,6 +4381,21 @@ void scheduler_tick(void)
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE,
 			walt_ktime_clock(), 0);
 	update_rq_clock(rq);
+#ifdef OPLUS_FEATURE_UIFIRST
+	if (sysctl_uifirst_enabled && (sysctl_slide_boost_enabled || sysctl_animation_type == LAUNCHER_SI_START)) {
+		u64 wallclock = walt_ktime_clock();
+		unsigned int flag = 0;
+		if(rq->curr && (is_heavy_ux_task(rq->curr) || rq->curr->sched_class == &rt_sched_class) && !ux_task_misfit(rq->curr, cpu)) {
+			ux_task_load[cpu] = calc_freq_ux_load(rq->curr, wallclock);
+			ux_load_ts[cpu] = wallclock;
+
+			flag = SCHED_CPUFREQ_BOOST;
+			cpufreq_update_util(rq, flag);
+		} else if (ux_task_load[cpu] != 0) {
+			ux_task_load[cpu] = 0;
+		}
+	}
+#endif
 	curr->sched_class->task_tick(rq, curr, 0);
 	cpu_load_update_active(rq);
 	calc_global_load_tick(rq);
@@ -4686,6 +4746,10 @@ static void __sched notrace __schedule(bool preempt)
 		}
 		switch_count = &prev->nvcsw;
 	}
+
+#ifdef OPLUS_FEATURE_UIFIRST
+	prev->enqueue_time = rq->clock;
+#endif /* OPLUS_FEATURE_UIFIRST */
 
 	next = pick_next_task(rq, prev, &rf);
 	wallclock = walt_ktime_clock();
@@ -7542,6 +7606,9 @@ void __init sched_init_smp(void)
 	sched_init_granularity();
 	free_cpumask_var(non_isolated_cpus);
 
+#ifdef OPLUS_FEATURE_UIFIRST
+	ux_init_cpu_data();
+#endif /* OPLUS_FEATURE_UIFIRST */
 	init_sched_rt_class();
 	init_sched_dl_class();
 
@@ -7660,6 +7727,9 @@ void __init sched_init(void)
 		init_cfs_rq(&rq->cfs);
 		init_rt_rq(&rq->rt);
 		init_dl_rq(&rq->dl);
+#ifdef OPLUS_FEATURE_UIFIRST
+		ux_init_rq_data(rq);
+#endif /* OPLUS_FEATURE_UIFIRST */
 #ifdef CONFIG_FAIR_GROUP_SCHED
 		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);

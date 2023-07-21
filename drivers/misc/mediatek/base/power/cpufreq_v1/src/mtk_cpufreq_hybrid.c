@@ -70,6 +70,10 @@ extern unsigned int cpumssv_get_state(void);
 #include <mcupm_ipi_id.h>
 #endif
 #include <linux/of_address.h>
+//#ifdef OPLUS_FEATURE_FINGERPRINT
+#define DVFSP_DT_NODE               "mediatek,mt6833-dvfsp"
+//#endif /* OPLUS_FEATURE_FINGERPRINT */
+
 u32 *g_dbg_repo;
 static u32 dvfsp_probe_done;
 void __iomem *log_repo;
@@ -953,6 +957,7 @@ static int _mt_dvfsp_pdrv_probe(struct platform_device *pdev)
 	int flag;
 	struct cpudvfs_doe *d = &dvfs_doe;
 #endif
+        printk("wp: _mt_dvfsp_pdrv_probe enter!\n");
 	csram_base = of_iomap(pdev->dev.of_node, 1);
 
 #ifdef ENABLE_DOE

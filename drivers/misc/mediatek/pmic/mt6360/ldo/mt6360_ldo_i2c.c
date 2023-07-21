@@ -626,13 +626,26 @@ static const struct mt6360_pdata_prop mt6360_pdata_props[] = {
 static int mt6360_ldo_apply_pdata(struct mt6360_ldo_info *mli,
 				  struct mt6360_ldo_platform_data *pdata)
 {
+#ifdef OPLUS_FEATURE_SDCARD
+	int i, ret;
+#else  /* OPLUS_FEATURE_SDCARD */
 	int ret;
+#endif /* OPLUS_FEATURE_SDCARD */
 
 	dev_dbg(mli->dev, "%s ++\n", __func__);
 	ret = mt6360_pdata_apply_helper(mli, pdata, mt6360_pdata_props,
 					ARRAY_SIZE(mt6360_pdata_props));
 	if (ret < 0)
 		return ret;
+#ifdef OPLUS_FEATURE_SDCARD
+	for (i = 0; i < MT6360_LDO_CTRLS_NUM; i++) {
+		ret = mt6360_ldo_reg_update_bits(mli,
+				 MT6360_LDO_LDO5_EN_CTRL1 + i, ldo_ctrl_mask[i],
+				 pdata->ldo5_ctrls[i]);
+		if (ret < 0)
+			return ret;
+	}
+#endif /* OPLUS_FEATURE_SDCARD */
 	dev_dbg(mli->dev, "%s --\n", __func__);
 	return 0;
 }
@@ -663,6 +676,10 @@ static int mt6360_ldo_parse_dt_data(struct device *dev,
 	ret = of_irq_to_resource_table(np, res, res_cnt);
 	pdata->irq_res = res;
 	pdata->irq_res_cnt = ret;
+#ifdef OPLUS_FEATURE_SDCARD
+	of_property_read_u8_array(np, "ldo5_ctrls",
+				  pdata->ldo5_ctrls, MT6360_LDO_CTRLS_NUM);
+#endif /* OPLUS_FEATURE_SDCARD */
 bypass_irq_res:
 	dev_dbg(dev, "%s --\n", __func__);
 	return 0;

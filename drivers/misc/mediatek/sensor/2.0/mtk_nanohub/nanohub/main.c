@@ -92,6 +92,8 @@ ssize_t nanohub_external_write(const char *buffer, size_t length)
 	int ret;
 	u8 ret_data;
 
+        pr_info("entering %s\n", __func__);
+
 	if (request_wakeup(data))
 		return -ERESTARTSYS;
 
@@ -109,6 +111,7 @@ ssize_t nanohub_external_write(const char *buffer, size_t length)
 
 	release_wakeup(data);
 
+        pr_info("leaving %s, ret = %d\n", __func__, ret);
 	return ret;
 }
 

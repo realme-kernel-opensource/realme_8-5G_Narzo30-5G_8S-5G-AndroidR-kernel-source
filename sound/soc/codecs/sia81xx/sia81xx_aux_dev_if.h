@@ -33,7 +33,6 @@ int soc_aux_init_only_sia81xx(
 	struct snd_soc_card *card);
 
 #ifdef VENDOR_EDIT
-/* Wenyang.Fan@PSW.MULTIMEDIA.AUDIODRIVER.MACHINE,2020/06/16, Add for adjust codec & Sia PA sequence */
 extern void sia81xx_start(void);
 extern void sia81xx_stop(void);
 #endif /* VENDOR_EDIT */

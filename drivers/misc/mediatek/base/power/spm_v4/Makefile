@@ -28,7 +28,11 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/lcm/inc/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/hps_v3/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/mcdi/include
 ccflags-y += -I$(srctree)/drivers/watchdog/mediatek/include/
+ifeq ($(CONFIG_OPLUS_FEATURE_UFS),y)
+ccflags-y += -I$(srctree)/drivers/scsi/oufs/
+else
 ccflags-y += -I$(srctree)/drivers/scsi/ufs/
+endif
 
 ifeq ($(CONFIG_MACH_MT6771), y)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/emi/submodule/

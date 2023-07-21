@@ -875,8 +875,13 @@ int sched_walt_enable(int user, int en)
 	}
 
 #ifdef CONFIG_SCHED_WALT
+#ifdef OPLUS_FEATURE_UIFIRST
+	sysctl_sched_use_walt_cpu_util  = 0;
+	sysctl_sched_use_walt_task_util = 0;
+#else
 	sysctl_sched_use_walt_cpu_util  = walted;
 	sysctl_sched_use_walt_task_util = walted;
+#endif
 	trace_sched_ctl_walt(user_mask, walted);
 #endif
 

@@ -7,7 +7,11 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/$(MTK_PLATFORM)
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/include
 ccflags-y += -I$(srctree)/drivers/devfreq
+ifeq ($(CONFIG_OPLUS_FEATURE_UFS),y)
+ccflags-y += -I$(srctree)/drivers/scsi/oufs
+else
 ccflags-y += -I$(srctree)/drivers/scsi/ufs
+endif
 
 ccflags-y += -I$(srctree)/drivers/mmc/host/mediatek/ComboA
 ifeq ($(CONFIG_MTK_PLATFORM), "mt6761")

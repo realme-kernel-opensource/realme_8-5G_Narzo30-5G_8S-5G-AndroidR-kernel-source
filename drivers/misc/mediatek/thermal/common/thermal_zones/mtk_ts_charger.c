@@ -26,6 +26,7 @@
 #include "mach/mtk_thermal.h"
 #include <linux/uidgid.h>
 #include <linux/slab.h>
+#include <soc/oplus/system/oppo_project.h>
 #if (CONFIG_MTK_GAUGE_VERSION == 30)
 #include <mt-plat/mtk_charger.h>
 #else
@@ -47,6 +48,10 @@ do { \
 
 #define mtktscharger_pr_notice(fmt, args...) \
 	pr_notice("[Thermal/tzcharger]" fmt, ##args)
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+extern bool oplus_tchg_01c_precision(void);
+#endif
 
 static kuid_t uid = KUIDT_INIT(0);
 static kgid_t gid = KGIDT_INIT(1000);
@@ -143,20 +148,26 @@ static int mtktscharger_get_hw_temp(void)
 
 	if (!pthermal_consumer)
 		return t;
-
+	
 #ifdef CONFIG_MTK_PUMP_EXPRESS_PLUS_30_SUPPORT
-	charger_idx = DIRECT_CHARGER;
+		charger_idx = DIRECT_CHARGER;
 #endif
 #ifdef CONFIG_MTK_DUAL_CHARGER_SUPPORT
-	charger_idx = SLAVE_CHARGER;
+		charger_idx = SLAVE_CHARGER;
 #endif
 	ret = charger_manager_get_charger_temperature(pthermal_consumer,
 		charger_idx, &tmin, &tmax);
 
 	if (ret >= 0) {
-		t = tmax * 1000;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (oplus_tchg_01c_precision())
+			t = 100 * tmax;
+		else
+			t = 1000 * tmax;
+#else
+		t = 1000 * tmax;
+#endif
 		prev_temp = t;
-	} else if (ret == -ENODEV) {
 	} else {
 		t = prev_temp;
 	}
@@ -383,7 +394,10 @@ struct thermal_cooling_device *cdev, unsigned long state)
 		/* To trigger data abort to reset the system
 		 * for thermal protection.
 		 */
-		BUG();
+		if (get_eng_version() != HIGH_TEMP_AGING)
+			BUG();
+		else
+			pr_info("%s should reset but bypass\n", __func__);
 	}
 
 	return 0;

@@ -31,7 +31,9 @@
 
 #include "flashlight-core.h"
 #include "flashlight-dt.h"
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <soc/oppo/oppo_project.h>
+#endif
 /* device tree should be defined in flashlight-dt.h */
 #ifndef MT6360_DTNAME
 #define MT6360_DTNAME "mediatek,flashlights_mt6360"
@@ -99,10 +101,21 @@ static const int mt6360_current[MT6360_LEVEL_NUM] = {
 	1150, 1200
 };
 
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 static const unsigned char mt6360_torch_level[MT6360_LEVEL_TORCH] = {
 	0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12,
 	0x14, 0x16, 0x18, 0x1A, 0x1C, 0x1E
 };
+#else
+static const unsigned char mt6360_torch_level[MT6360_LEVEL_TORCH] = {
+	0x00, 0x02, 0x04, 0x06, 0x07, 0x0A, 0x0C, 0x0E, 0x10, 0x12,
+	0x14, 0x16, 0x18, 0x1A, 0x1C, 0x1E
+};
+static const unsigned char mt6360_torch_level_20609[MT6360_LEVEL_TORCH] = {
+	0x00, 0x02, 0x04, 0x05, 0x06, 0x0A, 0x0C, 0x0E, 0x10, 0x12,
+	0x14, 0x16, 0x18, 0x1A, 0x1C, 0x1E
+};
+#endif
 
 /* 0x00~0x74 6.25mA/step 0x75~0xB1 12.5mA/step */
 static const unsigned char mt6360_strobe_level[MT6360_LEVEL_FLASH] = {
@@ -297,12 +310,24 @@ static int mt6360_set_level_ch1(int level)
 	}
 
 	/* set brightness level */
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (!mt6360_is_torch(level)) {
+			if ( is_project(20609) || is_project(0x2060A) || is_project(0x2060B) || is_project(20796) || is_project(0x206F0) || is_project(0x206FF)
+				|| is_project(0x2070C) || is_project(0x2070B) || is_project(0x2070E) || is_project(20795)){
+				flashlight_set_torch_brightness(
+					flashlight_dev_ch1, mt6360_torch_level_20609[level]);
+			} else {
+				flashlight_set_torch_brightness(
+					flashlight_dev_ch1, mt6360_torch_level[level]);
+			}
+	}
+	#else
 	if (!mt6360_is_torch(level))
 		flashlight_set_torch_brightness(
 				flashlight_dev_ch1, mt6360_torch_level[level]);
+	#endif
 	flashlight_set_strobe_brightness(
 			flashlight_dev_ch1, mt6360_strobe_level[level]);
-
 	return 0;
 }
 

@@ -58,7 +58,7 @@
 		skip_cnt++;\
 } while (0)\
 
-int increase_stop_threshold;
+int increase_stop_threshold = 1;
 module_param(increase_stop_threshold, int, 0644);
 /* return the estimated delay based on USB frame counters */
 snd_pcm_uframes_t snd_usb_pcm_delay(struct snd_usb_substream *subs,
@@ -324,6 +324,9 @@ static void stop_endpoints(struct snd_usb_substream *subs, bool wait)
 	if (wait) {
 		snd_usb_endpoint_sync_pending_stop(subs->sync_endpoint);
 		snd_usb_endpoint_sync_pending_stop(subs->data_endpoint);
+		#if defined(CONFIG_MACH_MT6833)
+		snd_usb_endpoint_stop_quirk(subs->data_endpoint);
+		#endif
 	}
 }
 

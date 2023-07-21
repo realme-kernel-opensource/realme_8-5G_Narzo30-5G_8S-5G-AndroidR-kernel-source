@@ -21,7 +21,11 @@
 #include "sched.h"
 #include "tune.h"
 #include "cpufreq_schedutil.h"
-
+#ifdef OPLUS_FEATURE_UIFIRST
+extern int sysctl_slide_boost_enabled;
+extern int sysctl_uifirst_enabled;
+extern u64 ux_task_load[];
+#endif
 static struct cpufreq_governor schedutil_gov;
 unsigned long boosted_cpu_util(int cpu);
 
@@ -59,6 +63,9 @@ struct sugov_policy {
 	bool work_in_progress;
 
 	bool need_freq_update;
+#ifdef OPLUS_FEATURE_UIFIRST
+	unsigned int flags;
+#endif
 };
 
 struct sugov_cpu {
@@ -135,7 +142,10 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 	 * limit once frequency change direction is decided, according
 	 * to the separate rate limits.
 	 */
-
+#ifdef OPLUS_FEATURE_UIFIRST
+	if (sg_policy->flags & SCHED_CPUFREQ_BOOST)
+		return true;
+#endif
 	delta_ns = time - sg_policy->last_freq_update_time;
 	return delta_ns >= sg_policy->min_rate_limit_ns;
 }
@@ -147,6 +157,10 @@ static bool sugov_up_down_rate_limit(struct sugov_policy *sg_policy, u64 time,
 
 	delta_ns = time - sg_policy->last_freq_update_time;
 
+#ifdef OPLUS_FEATURE_UIFIRST
+	if (sg_policy->flags & SCHED_CPUFREQ_BOOST)
+		return false;
+#endif
 	if (next_freq > sg_policy->next_freq &&
 	    delta_ns < sg_policy->up_rate_delay_ns)
 			return true;
@@ -247,8 +261,16 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 	max_cap = arch_scale_cpu_capacity(NULL, cpu);
 
 	*util = boosted_cpu_util(cpu);
+
+#ifdef OPLUS_FEATURE_UIFIRST
+	if (!sysctl_uifirst_enabled || !(sysctl_slide_boost_enabled || sysctl_animation_type == LAUNCHER_SI_START)|| !ux_task_load[cpu]) {
+		if (idle_cpu(cpu))
+			*util = 0;
+	}
+#else
 	if (idle_cpu(cpu))
 		*util = 0;
+#endif
 
 	*util = min(*util, max_cap);
 	*max = max_cap;
@@ -461,6 +483,9 @@ static void sugov_update_shared(struct update_util_data *hook, u64 time,
 	sg_cpu->max = max;
 	sg_cpu->flags = flags;
 
+#ifdef OPLUS_FEATURE_UIFIRST
+	sg_policy->flags = flags;
+#endif
 	sugov_set_iowait_boost(sg_cpu, time, flags);
 	sg_cpu->last_update = time;
 
@@ -886,7 +911,9 @@ static int sugov_start(struct cpufreq_policy *policy)
 	sg_policy->work_in_progress = false;
 	sg_policy->need_freq_update = false;
 	sg_policy->cached_raw_freq = 0;
-
+#ifdef OPLUS_FEATURE_UIFIRST
+	sg_policy->flags	= 0;
+#endif
 	for_each_cpu(cpu, policy->cpus) {
 		struct sugov_cpu *sg_cpu = &per_cpu(sugov_cpu, cpu);
 

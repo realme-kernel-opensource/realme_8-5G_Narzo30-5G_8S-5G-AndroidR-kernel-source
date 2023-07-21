@@ -54,6 +54,8 @@
 #include "mtk_disp_gamma.h"
 #include "mtk_disp_aal.h"
 #include "mtk_drm_mmp.h"
+#include <mt-plat/mtk_boot_common.h>
+extern unsigned long silence_mode;
 /* *******Panel Master******** */
 #include "mtk_fbconfig_kdebug.h"
 #ifdef CONFIG_MTK_HDMI_SUPPORT
@@ -3205,6 +3207,15 @@ static int mtk_drm_probe(struct platform_device *pdev)
 	DDPINFO("%s-\n", __func__);
 
 	disp_dts_gpio_init(dev, private);
+
+//#ifdef OPLUS_FEATURE_SILENCEMODE
+	pr_err("oppo_boot_mode=%d, get_boot_mode() is %d\n", oppo_boot_mode, get_boot_mode());
+	if ((oppo_boot_mode == OPPO_SILENCE_BOOT)
+		||(get_boot_mode() == OPPO_SAU_BOOT)) {
+		pr_err("%s OPPO_SILENCE_BOOT set silence_mode to 1\n", __func__);
+		silence_mode = 1;
+	}
+//#endif
 #ifdef CONFIG_MTK_IOMMU_V2
 	memcpy(&mydev, pdev, sizeof(mydev));
 #endif

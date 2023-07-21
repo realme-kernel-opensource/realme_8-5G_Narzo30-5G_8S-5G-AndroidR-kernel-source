@@ -130,6 +130,14 @@ static struct workqueue_struct *accdet_workqueue;
 static struct work_struct eint_work;
 static struct workqueue_struct *eint_workqueue;
 
+#ifdef VENDOR_EDIT
+struct delayed_work hp_detect_work;
+#ifdef CONFIG_HSKEY_BLOCK
+struct delayed_work hskey_block_work;
+bool g_hskey_block_flag;
+#endif /* CONFIG_HSKEY_BLOCK */
+#endif /* VENDOR_EDIT */
+
 /* micbias_timer: disable micbias if no accdet irq after eint,
  * timeout: 6 seconds
  * timerHandler: dis_micbias_timerhandler()
@@ -235,6 +243,10 @@ static void accdet_init_debounce(void);
 static void mini_dump_register(void);
 static void accdet_modify_vref_volt_self(void);
 /*******************global function declaration*****************/
+
+#ifdef VENDOR_EDIT
+void __attribute__((weak)) switch_headset_state(int headset_state) {return;}
+#endif /* VENDOR_EDIT */
 
 #if !defined CONFIG_MTK_PMIC_NEW_ARCH
 enum PMIC_FAKE_IRQ_ENUM {
@@ -446,25 +458,23 @@ static void dump_register(void)
 		st_addr = PMIC_ACCDET_AUXADC_SEL_ADDR;
 		end_addr = PMIC_ACCDET_MON_FLAG_EN_ADDR;
 		for (addr = st_addr; addr <= end_addr; addr += 8) {
-			idx = addr;
-			pr_info("(0x%x)=0x%x (0x%x)=0x%x ",
-				idx, pmic_read(idx),
-				idx+2, pmic_read(idx+2));
-			pr_info("(0x%x)=0x%x (0x%x)=0x%x\n",
-				idx+4, pmic_read(idx+4),
-				idx+6, pmic_read(idx+6));
+		idx = addr;
+		pr_info("(0x%x)=0x%x (0x%x)=0x%x (0x%x)=0x%x (0x%x)=0x%x\n",
+			idx, pmic_read(idx),
+			idx+2, pmic_read(idx+2),
+			idx+4, pmic_read(idx+4),
+			idx+6, pmic_read(idx+6));
 		}
 		pr_info("AUDDEC_ANA_RG\n");
 		st_addr = PMIC_RG_AUDPREAMPLON_ADDR;
 		end_addr = PMIC_RG_CLKSQ_EN_ADDR;
 		for (addr = st_addr; addr <= end_addr; addr += 8) {
-			idx = addr;
-			pr_info("(0x%x)=0x%x (0x%x)=0x%x ",
-				idx, pmic_read(idx),
-				idx+2, pmic_read(idx+2));
-			pr_info("(0x%x)=0x%x (0x%x)=0x%x\n",
-				idx+4, pmic_read(idx+4),
-				idx+6, pmic_read(idx+6));
+		idx = addr;
+		pr_info("(0x%x)=0x%x (0x%x)=0x%x (0x%x)=0x%x (0x%x)=0x%x\n",
+			idx, pmic_read(idx),
+			idx+2, pmic_read(idx+2),
+			idx+4, pmic_read(idx+4),
+			idx+6, pmic_read(idx+6));
 		}
 
 		pr_info("(0x%x)=0x%x (0x%x)=0x%x (0x%x)=0x%x (0x%x)=0x%x\n",
@@ -1034,6 +1044,16 @@ static u32 key_check(u32 v)
 #if PMIC_ACCDET_KERNEL
 static void send_key_event(u32 keycode, u32 flag)
 {
+#ifdef VENDOR_EDIT
+	pr_info("[accdet][send_key_event]eint_accdet_sync_flag = %d, cur_eint_state = %d\n",
+		eint_accdet_sync_flag, cur_eint_state);
+	if (((eint_accdet_sync_flag && (cur_eint_state == EINT_PIN_PLUG_OUT))
+		|| (!eint_accdet_sync_flag))
+		&& (keycode == MD_KEY)) {
+		pr_info("[accdet][send_key_event]No hook key release when plugging out\n");
+		return;
+	}
+#endif /* VENDOR_EDIT */
 	switch (keycode) {
 	case DW_KEY:
 		input_report_key(accdet_input_dev, KEY_VOLUMEDOWN, flag);
@@ -1855,7 +1875,9 @@ static void eint_work_callback(void)
 		eint_accdet_sync_flag = false;
 		accdet_thing_in_flag = false;
 		mutex_unlock(&accdet_eint_irq_sync_mutex);
+#ifndef VENDOR_EDIT
 		if (accdet_dts.moisture_detect_mode != 0x5)
+#endif
 			del_timer_sync(&micbias_timer);
 
 		/* disable accdet_sw_en=0
@@ -2139,7 +2161,13 @@ static int pmic_eint_queue_work(int eintID)
 			__func__);
 		cur_eint_state = EINT_PIN_PLUG_OUT;
 #if PMIC_ACCDET_KERNEL
+#ifdef VENDOR_EDIT
+		pr_info("%s water in no delayed work scheduled when plugging out\n", __func__);
+		cancel_delayed_work_sync(&hp_detect_work);
+		schedule_delayed_work(&hp_detect_work, 0);
+#else /* VENDOR_EDIT */
 		ret = queue_work(eint_workqueue, &eint_work);
+#endif /* VENDOR_EDIT */
 #else
 		eint_work_callback();
 #endif /* end of #if PMIC_ACCDET_KERNEL */
@@ -2154,15 +2182,46 @@ static int pmic_eint_queue_work(int eintID)
 		} else {
 			if (gmoistureID != M_PLUG_OUT) {
 				cur_eint_state = EINT_PIN_PLUG_IN;
-
+#ifdef VENDOR_EDIT
+			pr_info("%s delay work to disable micbias after 6s\n", __func__);
+			mod_timer(&micbias_timer,
+				jiffies + MICBIAS_DISABLE_TIMER);
+#else
 				if (accdet_dts.moisture_detect_mode != 0x5) {
 					mod_timer(&micbias_timer,
 					jiffies + MICBIAS_DISABLE_TIMER);
 				}
+#endif
 			}
 		}
 #if PMIC_ACCDET_KERNEL
+#ifdef VENDOR_EDIT
+		if (cur_eint_state == EINT_PIN_PLUG_IN) {
+#ifdef CONFIG_HSKEY_BLOCK
+			g_hskey_block_flag = true;
+			schedule_delayed_work(&hskey_block_work, msecs_to_jiffies(1500));
+#endif /* CONFIG_HSKEY_BLOCK */
+			pr_info("%s delayed work 500ms scheduled when plugging in\n", __func__);
+			schedule_delayed_work(&hp_detect_work, msecs_to_jiffies(500));
+#ifdef VENDOR_EDIT
+			pr_info("[TP] going to switch headset mode [%d] \n", 1);
+			switch_headset_state(1);
+#endif
+		} else {
+#ifdef VENDOR_EDIT
+			pr_info("[TP] going to switch headset mode [%d] \n", 0);
+			switch_headset_state(0);
+#ifdef CONFIG_HSKEY_BLOCK
+			cancel_delayed_work_sync(&hskey_block_work);
+#endif /* CONFIG_HSKEY_BLOCK */
+#endif
+			pr_info("%s no delayed work scheduled when plugging out\n", __func__);
+			cancel_delayed_work_sync(&hp_detect_work);
+			schedule_delayed_work(&hp_detect_work, 0);
+		}
+#else /* VENDOR_EDIT */
 		ret = queue_work(eint_workqueue, &eint_work);
+#endif /* VENDOR_EDIT */
 #else
 		eint_work_callback();
 #endif /* end of #if PMIC_ACCDET_KERNEL */
@@ -3388,6 +3447,13 @@ int mt_accdet_probe(struct platform_device *dev)
 		pr_notice("%s create eint workqueue fail.\n", __func__);
 		goto err_create_workqueue;
 	}
+
+#ifdef VENDOR_EDIT
+	INIT_DELAYED_WORK(&hp_detect_work, eint_work_callback);
+#ifdef CONFIG_HSKEY_BLOCK
+	INIT_DELAYED_WORK(&hskey_block_work, disable_hskey_block_callback);
+#endif /* CONFIG_HSKEY_BLOCK */
+#endif /* VENDOR_EDIT */
 
 #ifdef CONFIG_ACCDET_EINT
 	ret = ext_eint_setup(dev);

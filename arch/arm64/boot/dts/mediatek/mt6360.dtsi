@@ -169,12 +169,15 @@
 				  "ldo3_oc_evt", "ldo5_oc_evt",
 				  "ldo1_pgb_evt", "ldo2_pgb_evt",
 				  "ldo3_pgb_evt", "ldo5_pgb_evt";
+//#ifdef OPLUS_FEATURE_SDCARD
+		ldo5_ctrls = [00 80 01 2d a4];
+//#endif /* OPLUS_FEATURE_SDCARD */
 		mt_pmic_vfp_ldo_reg: ldo1 {
 			regulator-compatible = "LDO1";
 			regulator-name = "VFP";
 			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <3600000>;
-		};
+       		};
 		mt_pmic_vtp_ldo_reg: ldo2 {
 			regulator-compatible = "LDO2";
 			regulator-name = "VTP";

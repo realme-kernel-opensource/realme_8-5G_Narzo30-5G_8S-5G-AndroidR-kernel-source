@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2019 MediaTek Inc.
  */
-
+#include <linux/atomic.h>
 #include <linux/cpuidle.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -14,9 +14,15 @@
 #include <linux/syscore_ops.h>
 #include <linux/suspend.h>
 #include <linux/rtc.h>
+#include <linux/hrtimer.h>
+#include <linux/timer.h>
+#include <linux/completion.h>
+#include <linux/jiffies.h>
 #include <asm/cpuidle.h>
 #include <asm/suspend.h>
 
+#include <linux/sched.h>
+#include <linux/kthread.h>
 #include <mtk_lpm.h>
 #include <mtk_lpm_module.h>
 #include <mtk_lpm_call.h>
@@ -25,14 +31,19 @@
 #include <mtk_dbg_common_v1.h>
 #include <mt-plat/mtk_ccci_common.h>
 
+#include <uapi/linux/sched/types.h>
 #include "mt6833.h"
 #include "mt6833_suspend.h"
 
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+#include "../../../../../../../soc/oppo/oppo_wakelock_profiler/oplus_wakelock_profiler_mtk.h"	
+#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
 unsigned int mt6833_suspend_status;
-struct md_sleep_status before_md_sleep_status;
-struct md_sleep_status after_md_sleep_status;
+u64 before_md_sleep_time;
+u64 after_md_sleep_time;
 struct cpumask s2idle_cpumask;
 struct mtk_lpm_model mt6833_model_suspend;
+
 
 void __attribute__((weak)) subsys_if_on(void)
 {
@@ -59,70 +70,28 @@ void mtk_suspend_clk_dbg(void){}
 EXPORT_SYMBOL(mtk_suspend_clk_dbg);
 
 #define MD_SLEEP_INFO_SMEM_OFFEST (4)
-static void get_md_sleep_time(struct md_sleep_status *md_data)
+static u64 get_md_sleep_time(void)
 {
 	/* dump subsystem sleep info */
 #if defined(CONFIG_MTK_ECCCI_DRIVER)
 	u32 *share_mem = NULL;
-
-	if (!md_data)
-		return;
+	struct md_sleep_status md_data;
 
 	share_mem = (u32 *)get_smem_start_addr(MD_SYS1,
 		SMEM_USER_LOW_POWER, NULL);
 	if (share_mem == NULL) {
 		printk_deferred("[name:spm&][%s:%d] - No MD share mem\n",
 			 __func__, __LINE__);
-		return;
+		return 0;
 	}
 	share_mem = share_mem + MD_SLEEP_INFO_SMEM_OFFEST;
-	memset(md_data, 0, sizeof(struct md_sleep_status));
-	memcpy(md_data, share_mem, sizeof(struct md_sleep_status));
+	memset(&md_data, 0, sizeof(struct md_sleep_status));
+	memcpy(&md_data, share_mem, sizeof(struct md_sleep_status));
+
+	return md_data.sleep_time;
 #else
-	return;
+	return 0;
 #endif
-}
-
-static void log_md_sleep_info(void)
-{
-#define LOG_BUF_SIZE	256
-	char log_buf[LOG_BUF_SIZE] = { 0 };
-	int log_size = 0;
-
-	if (after_md_sleep_status.sleep_time >= before_md_sleep_status.sleep_time) {
-		printk_deferred("[name:spm&][SPM] md_slp_duration = %llu (32k)\n",
-			after_md_sleep_status.sleep_time - before_md_sleep_status.sleep_time);
-
-		log_size += scnprintf(log_buf + log_size,
-		LOG_BUF_SIZE - log_size, "[name:spm&][SPM] ");
-		log_size += scnprintf(log_buf + log_size,
-		LOG_BUF_SIZE - log_size, "MD/2G/3G/4G/5G_FR1 = ");
-		log_size += scnprintf(log_buf + log_size,
-		LOG_BUF_SIZE - log_size, "%d.%03d/%d.%03d/%d.%03d/%d.%03d/%d.%03d seconds",
-			(after_md_sleep_status.md_sleep_time -
-				before_md_sleep_status.md_sleep_time) / 1000000,
-			(after_md_sleep_status.md_sleep_time -
-				before_md_sleep_status.md_sleep_time) % 1000000 / 1000,
-			(after_md_sleep_status.gsm_sleep_time -
-				before_md_sleep_status.gsm_sleep_time) / 1000000,
-			(after_md_sleep_status.gsm_sleep_time -
-				before_md_sleep_status.gsm_sleep_time) % 1000000 / 1000,
-			(after_md_sleep_status.wcdma_sleep_time -
-				before_md_sleep_status.wcdma_sleep_time) / 1000000,
-			(after_md_sleep_status.wcdma_sleep_time -
-				before_md_sleep_status.wcdma_sleep_time) % 1000000 / 1000,
-			(after_md_sleep_status.lte_sleep_time -
-				before_md_sleep_status.lte_sleep_time) / 1000000,
-			(after_md_sleep_status.lte_sleep_time -
-				before_md_sleep_status.lte_sleep_time) % 1000000 / 1000,
-			(after_md_sleep_status.nr_sleep_time -
-				before_md_sleep_status.nr_sleep_time) / 1000000,
-			(after_md_sleep_status.nr_sleep_time -
-				before_md_sleep_status.nr_sleep_time) % 10000000 / 1000);
-
-		WARN_ON(strlen(log_buf) >= LOG_BUF_SIZE);
-		printk_deferred("[name:spm&][SPM] %s", log_buf);
-	}
 }
 
 static inline int mt6833_suspend_common_enter(unsigned int *susp_status)
@@ -168,7 +137,7 @@ static int __mt6833_suspend_prompt(int type, int cpu,
 			__func__, __LINE__);
 
 	/* Record md sleep time */
-	get_md_sleep_time(&before_md_sleep_status);
+	before_md_sleep_time = get_md_sleep_time();
 
 
 PLAT_LEAVE_SUSPEND:
@@ -195,8 +164,13 @@ static void __mt6833_suspend_reflect(int type, int cpu,
 		issuer->log(MT_LPM_ISSUER_SUSPEND, "suspend", NULL);
 
 	/* show md sleep duration during AP suspend */
-	get_md_sleep_time(&after_md_sleep_status);
-	log_md_sleep_info();
+	after_md_sleep_time = get_md_sleep_time();
+	if (after_md_sleep_time >= before_md_sleep_time)
+		printk_deferred("[name:spm&][SPM] md_slp_duration = %llu",
+			after_md_sleep_time - before_md_sleep_time);
+		    #ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+			oplus_rpmh_stats_statics("Mpss",0,(after_md_sleep_time - before_md_sleep_time));
+			#endif/*OPLUS_FEATURE_POWERINFO_STANDBY*/
 }
 int mt6833_suspend_system_prompt(int cpu,
 					const struct mtk_lpm_issuer *issuer)
@@ -260,6 +234,8 @@ void mt6833_suspend_s2idle_reflect(int cpu,
 		__mt6833_suspend_reflect(MTK_LPM_SUSPEND_S2IDLE,
 					 cpu, issuer);
 
+		if (mt6833_model_suspend.flag & MTK_LP_PREPARE_FAIL)
+			mt6833_model_suspend.flag &= (~MTK_LP_PREPARE_FAIL);
 
 #ifdef CONFIG_PM_SLEEP
 		/* Notice
@@ -269,11 +245,8 @@ void mt6833_suspend_s2idle_reflect(int cpu,
 		 * enter idle state. So we need to using RCU_NONIDLE()
 		 * with syscore.
 		 */
-		if (!(mt6833_model_suspend.flag & MTK_LP_PREPARE_FAIL))
-			RCU_NONIDLE(syscore_resume());
-
-		if (mt6833_model_suspend.flag & MTK_LP_PREPARE_FAIL)
-			mt6833_model_suspend.flag &= (~MTK_LP_PREPARE_FAIL);
+		RCU_NONIDLE(syscore_resume());
+		RCU_NONIDLE(pm_system_wakeup());
 #endif
 	}
 	cpumask_clear_cpu(cpu, &s2idle_cpumask);
@@ -295,12 +268,27 @@ struct mtk_lpm_model mt6833_model_suspend = {
 };
 
 #ifdef CONFIG_PM
+#define CPU_NUMBER (NR_CPUS)
+struct mtk_lpm_abort_control {
+	struct timer_list timer;
+};
+
+static atomic_t in_sleep;
+static struct mtk_lpm_abort_control mtk_lpm_ac[CPU_NUMBER];
+static void lpm_timer_callback(struct timer_list *timer)
+{
+	if (atomic_dec_and_test(&in_sleep)) {
+		pr_info("[name:spm&][LPM] :wakeup system due to not entering suspend.\n");
+		pm_system_wakeup();
+	}
+}
+
 static int mt6833_spm_suspend_pm_event(struct notifier_block *notifier,
 			unsigned long pm_event, void *unused)
 {
 	struct timespec ts;
 	struct rtc_time tm;
-
+	int i;
 	getnstimeofday(&ts);
 	rtc_time_to_tm(ts.tv_sec, &tm);
 
@@ -316,14 +304,21 @@ static int mt6833_spm_suspend_pm_event(struct notifier_block *notifier,
 		"[name:spm&][SPM] PM: suspend entry %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
 			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
-
+		atomic_set(&in_sleep, 1);
+		for_each_online_cpu(i) {
+			timer_setup(&mtk_lpm_ac[i].timer, lpm_timer_callback, 0);
+			mtk_lpm_ac[i].timer.expires = jiffies + msecs_to_jiffies(5000);
+			add_timer_on(&mtk_lpm_ac[i].timer, i);
+		}
 		return NOTIFY_DONE;
 	case PM_POST_SUSPEND:
+		for_each_online_cpu(i)
+			del_timer_sync(&mtk_lpm_ac[i].timer);
 		printk_deferred(
 		"[name:spm&][SPM] PM: suspend exit %d-%02d-%02d %02d:%02d:%02d.%09lu UTC\n",
 			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
-
+		atomic_set(&in_sleep, 0);
 		return NOTIFY_DONE;
 	}
 	return NOTIFY_OK;
@@ -333,7 +328,7 @@ static struct notifier_block mt6833_spm_suspend_pm_notifier_func = {
 	.notifier_call = mt6833_spm_suspend_pm_event,
 	.priority = 0,
 };
-#endif
+#endif/* CONFIG_PM */
 
 int __init mt6833_model_suspend_init(void)
 {
